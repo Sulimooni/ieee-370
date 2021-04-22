@@ -1,4 +1,4 @@
-function [s_side1,s_side2] = IEEEP3702xThru(s_2xthru,varargin)
+function [s_side1,s_side2] = IEEEP3702xThru(s_2xthru)
 % Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
 %
 % This work is licensed to The Institute of Electrical and Electronics
@@ -42,18 +42,15 @@ function [s_side1,s_side2] = IEEEP3702xThru(s_2xthru,varargin)
 %
 % SPDX-License-Identifier: BSD-3-Clause
 %
-% Function: [s_side1,s_side2] = IEEEP3702xThru(s_2xthru,response)
+% Function: [s_side1,s_side2] = IEEEP3702xThru(s_2xthru)
 %
-% Author: Jason J. Ellison, Published February 5th, 2018
-% Revision: v13
+% Author: Jason J. Ellison, Published February 17th, 2021
+% Revision: v15
 % 
 % IEEEP3702xThru.m creates error boxes from a test fixture 2x thru. 
 % 
 % Input: 
 % s_2xthru--an s parameter object of the 2x thru.
-% 
-% response (optional)-- Choose impulse or step response to create the e00 transfer function.
-%                       0(default) for impulse, 1 for step
 % 
 % Outputs: 
 % s_side1--an s parameter object of the error box representing the half of the 2x thru connected to port 1
@@ -64,186 +61,177 @@ function [s_side1,s_side2] = IEEEP3702xThru(s_2xthru,varargin)
 % [s_side1,s_side2] = IEEEP3702xThru(s_2xthru);
 % s_deembedded_dut = deembedsparams(s_fixture_dut_fixture,s_side1,s_side2);
 
-if nargin >= 2
-    response = varargin{1};
+f = s_2xthru.Frequencies.';
+s = s_2xthru.Parameters;
+
+% strip DC point if one exists
+if f(1) == 0
+    warning('DC point detected. An interpolated DC point will be included in the errorboxes.');
+    flag_DC = 1;
+    fold = f;
+    f = f(2:end);
+    s = s(:,:,2:end);
 else
-    response = 0;
+    flag_DC = 0;
 end
 
-
-s2x = s_2xthru;
-f = s2x.Frequencies;
-fnew = linspace(1e6,f(end),f(end)/1e6);
-n = length(fnew);
-n_orig = length(f);
-npad = n*2+1;
-p2x = s2x.Parameters;
-p112x = squeeze(p2x(1,1,:));
-p212x = squeeze(p2x(2,1,:));
-
-% get the DC point of p112x and p212x and interpolate
-p112xDC = DC(p112x,f);
-p112x = [p112xDC; p112x];
-p112x = interp1([0;f],p112x,[0 fnew].','spline');
-
-p212xDC = DC(p212x,f);
-p212x = [p212xDC; p212x];
-p212x = interp1([0;f],p212x,[0 fnew].');
-p112x = makeSymmetric(p112x);
-p212x = makeSymmetric(p212x);
-
-% convert p112x and p212x to time
-t112x = ifft(p112x,'symmetric');
-t212x = ifft(p212x,'symmetric');
-
-% convert t112x and t212x to step response
-t112xStep = makeStep(fftshift(t112x));
-t212xStep = makeStep(fftshift(t212x));
-
-% find the mid point of the trace in z
-[~,mid_z] = min(abs(t212xStep-0.5));
-
-if response == 1 % use step response
-    % make the t112xStep t111xStep
-    t111xStep = zeros(n*2 + 1,1);
-    t111xStep((n+1):mid_z) = t112xStep((n+1):mid_z);
-    t111xStep = ifftshift(t111xStep);
-
-    % convert t111xStep to t111x
-    t111x = t111xStep - [0 ; t111xStep(1:end-1)];
-    
-elseif response == 0 % use impulse response
-    % make the t112x, t111x
-    t112xs = fftshift(t112x);
-    t111x = zeros(n*2 + 1,1);
-    t111x(1:mid_z) = t112xs(1:mid_z);
-    
-    t111x = ifftshift(t111x);
-end
-
-% convert to p111x
-p111x = fft(t111x);
-
-% calculate the p221x and p211x
-p221x = (p112x - p111x)./p212x;
-
-% the choice of sign in the sqrt is important. Use the sign that captures the proper angle.
-p211x = zeros(npad,1);
-p211x(1) = sqrt(p212x(1).*(1-p221x(1).^2));
-test = sqrt(p212x.*(1-p221x.^2));
-k = 1;
-for i = 2:npad
-    if angle(test(i)) - angle(test(i-1)) > 0
-        k = k*-1;
+% interpolate S-parameters if the frequency vector is not acceptable
+if f(2) - f(1) ~= f(1)
+    flag_df = 1;
+    warning('Non-uniform frequency vector detected. A spline interpolated S-parameter matrix will be created for this calculation. The output results will be re-interpolated to the original vector.');
+    fold = f;
+    if mod(f(end),f(1)) == 0
+        fnew = f(1):f(1):f(end);
+    else
+        fnew = f(1):f(1):(f(end) - mod(f(end),f(1)));
     end
-    p211x(i) = k*sqrt(p212x(i).*(1-p221x(i).^2));
-end
-
-% convert errorbox elements to original frequency vector
-p111x = p111x(2:length(fnew)+1);
-p111x = interp1(fnew,p111x,f,'spline');
-
-p211x = p211x(2:length(fnew)+1);
-p211x = interp1(fnew,p211x,f,'spline');
-
-p221x = p221x(2:length(fnew)+1);
-p221x = interp1(fnew,p221x,f,'spline');
-
-% create the error box and make the s-parameter block
-errorbox = zeros(2,2,n_orig);
-errorbox(1,1,:) = p111x;
-errorbox(2,1,:) = p211x;
-errorbox(1,2,:) = p211x;
-errorbox(2,2,:) = p221x;
-
-s_side1 = sparameters(errorbox,f);
-
-s2x = s_2xthru;
-f = s2x.Frequencies;
-fnew = linspace(1e6,f(end),f(end)/1e6);
-n = length(fnew);
-n_orig = length(f);
-npad = n*2+1;
-p2x = s2x.Parameters;
-p112x = squeeze(p2x(2,2,:));
-p212x = squeeze(p2x(1,2,:));
-
-% get the DC point of p112x and p212x and interpolate
-p112xDC = DC(p112x,f);
-p112x = [p112xDC; p112x];
-p112x = interp1([0;f],p112x,[0 fnew].','spline');
-
-p212xDC = DC(p212x,f);
-p212x = [p212xDC; p212x];
-p212x = interp1([0;f],p212x,[0 fnew].');
-p112x = makeSymmetric(p112x);
-p212x = makeSymmetric(p212x);
-
-% convert p112x and p212x to time
-t112x = ifft(p112x,'symmetric');
-t212x = ifft(p212x,'symmetric');
-
-% convert t112x and t212x to step response
-t112xStep = makeStep(fftshift(t112x));
-t212xStep = makeStep(fftshift(t212x));
-
-% find the mid point of the trace in z
-[~,mid_z] = min(abs(t212xStep-0.5));
-
-if response == 1 % use step response
-    % make the t112xStep t111xStep
-    t111xStep = zeros(n*2 + 1,1);
-    t111xStep((n+1):mid_z) = t112xStep((n+1):mid_z);
-    t111xStep = ifftshift(t111xStep);
-
-    % convert t111xStep to t111x
-    t111x = t111xStep - [0 ; t111xStep(1:end-1)];
-    
-elseif response == 0 % use impulse response
-    % make the t112x, t111x
-    t112xs = fftshift(t112x);
-    t111x = zeros(n*2 + 1,1);
-    t111x(1:mid_z) = t112xs(1:mid_z);
-    
-    t111x = ifftshift(t111x);
-end
-
-% convert to p111x
-p111x = fft(t111x);
-
-% calculate the p221x and p211x
-p221x = (p112x - p111x)./p212x;
-
-% the choice of sign in the sqrt is important. Use the sign that captures the proper angle.
-p211x = zeros(npad,1);
-p211x(1) = sqrt(p212x(1).*(1-p221x(1).^2));
-test = sqrt(p212x.*(1-p221x.^2));
-k = 1;
-for i = 2:npad
-    if angle(test(i)) - angle(test(i-1)) > 0
-        k = k*-1;
+    snew = zeros(2,2,length(fnew));
+    for i = 1:2
+        for j = 1:2
+            snew(i,j,:) = interp1(f,squeeze(s(i,j,:)),fnew,'spline');
+        end
     end
-    p211x(i) = k*sqrt(p212x(i).*(1-p221x(i).^2));
+    sold = s; % currently unused, but is here for debug.
+    s = snew;
+    f = fnew;
+else
+    flag_df = 0;
 end
 
-% convert errorbox elements to original frequency vector
-p111x = p111x(2:length(fnew)+1);
-p111x = interp1(fnew,p111x,f,'spline');
+n = length(f);
+s11 = squeeze(s(1,1,:));
 
-p211x = p211x(2:length(fnew)+1);
-p211x = interp1(fnew,p211x,f,'spline');
+% get e001 and e002
+% e001
+s21 = squeeze(s(2,1,:));
+dcs21 = dc_interp(s21,f);
+t21 = fftshift(ifft(makeSymmetric([dcs21;s21]),'symmetric'));
+[~,x] = max(t21);
 
-p221x = p221x(2:length(fnew)+1);
-p221x = interp1(fnew,p221x,f,'spline');
+dcs11 = DC(s11,f);
+t11 = fftshift(ifft(makeSymmetric([dcs11;s11]),'symmetric'));
+step11 = makeStep(t11);
+z11 = -50.*(step11 + 1)./(step11 - 1);
+z11x = z11(x);
 
-% create the error box and make the s-parameter block
-errorbox = zeros(2,2,n_orig);
-errorbox(1,1,:) = p111x;
-errorbox(2,1,:) = p211x;
-errorbox(1,2,:) = p211x;
-errorbox(2,2,:) = p221x;
+temp = sparameters(s,f,50);
+temp = sparameters(temp,z11x);
+sr = temp.Parameters; 
+clear temp;
 
-s_side2 = sparameters(errorbox([2 1],[2 1],:),f);
+s11r = squeeze(sr(1,1,:));
+s21r = squeeze(sr(2,1,:));
+s12r = squeeze(sr(1,2,:));
+s22r = squeeze(sr(2,2,:));
+
+dcs11r = DC(s11r,f);
+t11r = fftshift(ifft(makeSymmetric([dcs11r;s11r]),'symmetric'));
+t11r(x:end) = 0;
+e001 = fft(ifftshift(t11r));
+e001 = e001(2:n+1);
+
+dcs22r = DC(s22r,f);
+t22r = fftshift(ifft(makeSymmetric([dcs22r;s22r]),'symmetric'));
+t22r(x:end) = 0;
+e002 = fft(ifftshift(t22r));
+e002 = e002(2:n+1);
+
+% calc e111 and e112
+e111 = (s22r - e002)./s12r;
+e112 = (s11r - e001)./s21r;
+
+% calc e01
+k = 1;
+test = k.*sqrt(s21r.*(1 - e111.*e112));
+e01 = zeros(n,1);
+for i = 1:n
+    if i > 1
+        if angle(test(i))- angle(test(i-1)) > 0
+            k = -1*k;
+        end
+    end
+    e01(i) = k*sqrt(s21r(i)*(1 - e111(i)*e112(i)));    
+end
+
+% calc e10
+k = 1;
+test = k.*sqrt(s12r.*(1 - e111.*e112));
+e10 = zeros(n,1);
+for i = 1:n
+    if i > 1
+        if angle(test(i))- angle(test(i-1)) > 0
+            k = -1*k;
+        end
+    end
+    e10(i) = k*sqrt(s12r(i)*(1 - e111(i)*e112(i)));    
+end
+
+% S-parameters are setup correctly
+if and(flag_DC == 0, flag_df == 0)
+    fixture_model_1r = zeros(2,2,n);
+    fixture_model_1r(1,1,:) = e001;
+    fixture_model_1r(2,1,:) = e01;
+    fixture_model_1r(1,2,:) = e01;
+    fixture_model_1r(2,2,:) = e111;
+
+    fixture_model_2r = zeros(2,2,n);
+    fixture_model_2r(2,2,:) = e002;
+    fixture_model_2r(1,2,:) = e10;
+    fixture_model_2r(2,1,:) = e10;
+    fixture_model_2r(1,1,:) = e112;
+else % S-parameters are not setup correctly
+    if flag_DC == 1 % DC Point was included in the original file
+        fixture_model_1r = zeros(2,2,n+1);
+        fixture_model_1r(1,1,2:end) = e001; fixture_model_1r(1,1,1) = dc_interp(squeeze(fixture_model_1r(1,1,2:end)),f);
+        fixture_model_1r(2,1,2:end) = e01; fixture_model_1r(2,1,1) = dc_interp(squeeze(fixture_model_1r(2,1,2:end)),f);
+        fixture_model_1r(1,2,2:end) = e01; fixture_model_1r(1,2,1) = dc_interp(squeeze(fixture_model_1r(1,2,2:end)),f);
+        fixture_model_1r(2,2,2:end) = e111; fixture_model_1r(2,2,1) = dc_interp(squeeze(fixture_model_1r(2,2,2:end)),f);
+
+        fixture_model_2r = zeros(2,2,n+1);
+        fixture_model_2r(2,2,2:end) = e002; fixture_model_2r(1,1,1) = dc_interp(squeeze(fixture_model_2r(1,1,2:end)),f);
+        fixture_model_2r(1,2,2:end) = e10; fixture_model_2r(2,1,1) = dc_interp(squeeze(fixture_model_2r(2,1,2:end)),f);
+        fixture_model_2r(2,1,2:end) = e10; fixture_model_2r(1,2,1) = dc_interp(squeeze(fixture_model_2r(1,2,2:end)),f);
+        fixture_model_2r(1,1,2:end) = e112; fixture_model_2r(2,2,1) = dc_interp(squeeze(fixture_model_2r(2,2,2:end)),f);
+        f = [0 f];
+    else % DC Point wasn't included in the original file, but the DF was not the same as f(1)
+        fixture_model_1r = zeros(2,2,n);
+        fixture_model_1r(1,1,:) = e001;
+        fixture_model_1r(2,1,:) = e01;
+        fixture_model_1r(1,2,:) = e01;
+        fixture_model_1r(2,2,:) = e111;
+
+        fixture_model_2r = zeros(2,2,n);
+        fixture_model_2r(2,2,:) = e002;
+        fixture_model_2r(1,2,:) = e10;
+        fixture_model_2r(2,1,:) = e10;
+        fixture_model_2r(1,1,:) = e112;
+    end
+    if flag_df == 1 % if df was not the same as f(1)
+        % save the current errorboxes
+        fixture_model_1r_temp = fixture_model_1r;
+        fixture_model_2r_temp = fixture_model_2r;
+        % initialize the new errorboxes
+        fixture_model_1r = zeros(2,2,length(fold));
+        fixture_model_2r = zeros(2,2,length(fold));
+        % interpolate the errorboxes to the original frequency vector
+        for i = 1:2
+            for j = 1:2
+                fixture_model_1r(i,j,:) = interp1(f,squeeze(fixture_model_1r_temp(i,j,:)),fold,'spline');
+                fixture_model_2r(i,j,:) = interp1(f,squeeze(fixture_model_2r_temp(i,j,:)),fold,'spline');                
+            end
+        end
+    end
+    % replace the vector used for the calculation with the original vector.
+    f = fold; 
+end
+
+% create the S-parameter objects for the errorboxes
+s_fixture_model_r1 = sparameters(fixture_model_1r,f,z11x);
+s_fixture_model_r2 = sparameters(fixture_model_2r,f,z11x);
+
+% renormalize the S-parameter errorboxes to the original reference impedance (assumed to be 50)
+s_side1 = sparameters(s_fixture_model_r1,50);
+s_side2 = sparameters(s_fixture_model_r2,50);
 
 function [symmetric] = makeSymmetric(nonsymmetric)
     % [symmetric] = makeSymmetric(nonsymmetric)
@@ -255,18 +243,47 @@ function [symmetric] = makeSymmetric(nonsymmetric)
     symmetric_abs = [abs(nonsymmetric); flip(abs(nonsymmetric(2:end)))];
     symmetric_ang = [angle(nonsymmetric); -flip(angle(nonsymmetric(2:end)))];
     symmetric = symmetric_abs.*exp(1i.*symmetric_ang);
-
-function [DCpoint] = DC(s,f)       
-    % find the real dc point. The equation is y = a*x^2+b.
-    N = 2; % N can be changed to improve DC point accuracy. Larger numbers for short structures. Small numbers for long structures
-    x = f(1:N);
-    y = real(s(1:N));
-
-    X = [ones(N,1) x.^2];
-    t = (X'*X)\X'*y;
-    DCpoint = t(1);
+    
 
 function [step] = makeStep(impulse)
     ustep = ones(length(impulse),1);    
     step = conv(ustep,impulse);
     step = step(1:length(impulse));
+    
+function [DCpoint] = DC(s,f)       
+        DCpoint = 0.002; % seed for the algorithm
+        err = 1; % error seed
+        allowedError = 1e-12; % allowable error
+        cnt = 0;
+        df = f(2) - f(1);
+        n = length(f);
+        t = linspace(-1/df,1/df,n*2+1);
+        [~,ts] = min(abs(t - (-3e-9)));
+        Hr = COM_receiver_noise_filter(f,f(end)/2);
+        while (err > allowedError)
+            h1 = makeStep(fftshift(ifft(makeSymmetric([DCpoint;s.*Hr.']),'symmetric')));
+            h2 = makeStep(fftshift(ifft(makeSymmetric([DCpoint+0.001;s.*Hr.']),'symmetric')));
+            m = (h2(ts)-h1(ts))/0.001;
+            b = h1(ts) - m*DCpoint;
+            DCpoint = (0 - b)/m;
+            err = abs(h1(ts) - 0);
+            cnt = cnt+1;
+        end
+        
+function Hr = COM_receiver_noise_filter(f,fr)
+    % reciever filter in COM defined by eq 93A-20
+    fdfr = f./fr;
+    Hr = 1./(1 - 3.414214.*(fdfr).^2 + fdfr.^4 + 1i.*2.613126.*(fdfr - fdfr.^3)); % eq 93A-20
+    
+function dc = dc_interp(sin,f)
+% enforces symmetric upon the first 10 points and interpolates the DC
+% point.
+
+sp = sin(1:10);
+fp = f(1:10).';
+
+snp = [conj(flip(sp)) ; sp];
+fnp = [-flip(fp) ; fp];
+fnew = [-flip(fp) ; 0; fp];
+snew = interp1(fnp,snp,fnew,'spline');
+dc = real(snew(11));
