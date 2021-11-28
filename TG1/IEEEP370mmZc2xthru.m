@@ -44,8 +44,8 @@ function [s_side1,s_side2] = IEEEP370mmZc2xthru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370mmZc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published March 26th, 2021
-% Revision: v6
+% Author: Jason J. Ellison, Published November 28th, 2021
+% Revision: v7
 % 
 % IEEEP370mmZc2xThru.m creates error boxes from a four-port test fixture 2x thru and
 % the four-port fixture-dut-fixture S-parameters.
@@ -156,6 +156,29 @@ for i = 1:length(names)
             portOrder = values{i};
     end
 end
+
+% ======= check if 2x-thru is an s2p of s4p ============
+% if it is, change port order
+if s_2xthru.NumPorts == 2
+    temp_p = s_2xthru.Parameters;
+    temp_f = s_2xthru.Frequencies;
+    temp_out = zeros(4,4,length(temp_f));
+    switch portOrder
+        case 1
+            temp_out([1 2],[1 2],:) = temp_p;
+            temp_out([3 4],[3 4],:) = temp_p;            
+        case 2
+            temp_out([1 3],[1 3],:) = temp_p;
+            temp_out([2 4],[2 4],:) = temp_p;                        
+        case 3 % if you're reading this, never use this port order =P
+            temp_out([1 4],[1 4],:) = temp_p;
+            temp_out([2 3],[2 3],:) = temp_p;                        
+    end
+
+    s_2xthru = sparameters(temp_out,temp_f);
+    clear temp_p temp_f;
+end
+
 
 % =========== CHECK FOR BAD INPUTS =============
 p = s_fix_dut_fix.Parameters;
