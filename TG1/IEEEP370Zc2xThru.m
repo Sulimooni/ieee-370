@@ -44,8 +44,8 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published 2-17-2021
-% Revision: v7
+% Author: Jason J. Ellison, Published November 28th, 2021
+% Revision: v8
 % 
 % IEEEP370Zc2xThru.m creates error boxes from a test fixture 2x thru and
 % the fixture-dut-fixture S-parameters.
@@ -79,6 +79,12 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 %    default: true
 % "side2": set to de-embed the left side errorbox (boolean).
 %    default: true
+% "NRP": set to enforce the Nyquist Rate Point during de-embedding and to
+% add the appropriote delay to the errorboxes. 
+%    default: true
+% "leadin": a number of discrete points before t = 0 that are non-zero from
+% calibration error. 
+%    default: 1
 % 
 % Usage:
 % 
@@ -98,6 +104,9 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 % Pullback side 1 10 points and side 2 30 points
 % [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,"pullback1",10,"pullback2",30);
 %
+% Disable Nyquist Rate Point
+% [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,"NRP",false);
+%
 % FUNCTION: [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix)
 
 names = varargin(1:2:end);
@@ -114,9 +123,11 @@ side1 = true;
 side2 = true;
 flag_DC = false;
 flag_DF = false;
+NRP_enable = true;
+leadin = 1;
 
 for i = 1:length(names)
-    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2"]);
+    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2","NRP","leadin"]);
     switch names{i}
         case "z0"
             z0 = values{i};
@@ -135,6 +146,10 @@ for i = 1:length(names)
             side1 = values{i};
         case "side2"
             side2 = values{i};
+        case "NRP"
+            NRP_enable = values{i};
+        case "leadin"
+            leadin = values{i};
     end
 end
 
@@ -178,6 +193,19 @@ if ~isequal(s_2xthru.Frequencies,s_fix_dut_fix.Frequencies)
     warning("2x-thru does not have the same frequency vector as the fixture-dut-fixture. Interpolating to fix problem");
 end
 
+% =========== Enforce Nyquist Rate Point ==
+if NRP_enable
+    [s_fix_dut_fix,TD] = NRP(s_fix_dut_fix);
+    [s_2xthru,~] = NRP(s_2xthru,-TD);
+end
+
+% === Remove Lead-in Points ===============
+if leadin > 0
+    [~,temp1,temp2] = peelNPointsLossless(shiftNPoints(s_fix_dut_fix,leadin),leadin);
+    leadin1 = shiftOnePort(temp1,-leadin,1);
+    leadin2 = shiftOnePort(temp2,-leadin,2);
+end
+
 % =========== CALCULATE GAMMA =============
 p = s_2xthru.Parameters;
 f = s_2xthru.Frequencies;
@@ -205,6 +233,8 @@ end
 
 % =========== EXTRACT ERRORBOXES =============
 % make the both error box
+
+
 s_side1 = thru(s_fix_dut_fix);
 s_side2 = thru(s_fix_dut_fix);
 if and(and(isequal(pullback1,pullback2),side1),side2)
@@ -222,6 +252,8 @@ else
     warning("no output because no output was requested");
 end
 
+
+
 % =========== INTERPOLATE TO ORIGINAL FREQUENCY IF NEEDED =============
 % revert back to original frequency vector
 if flag_DF
@@ -233,6 +265,22 @@ end
 if flag_DC
    s_side1 = add_dc(s_side1);
    s_side2 = add_dc(s_side2);
+end
+
+% remove lead in
+if leadin > 0
+    s_side1 = cascadesparams(leadin1,s_side1);
+    s_side2 = cascadesparams(s_side2,leadin2);
+end
+
+% if Nyquist Rate Point enfocement is enabled.
+if NRP_enable
+    if side1 % if side 1 is enabled
+        s_side1 = NRP(s_side1,TD,1);
+    end
+    if side2 % if side 2 is enabled
+        s_side2 = NRP(s_side2,TD,2);
+    end
 end
 
 % ========= END ===========
@@ -514,4 +562,169 @@ function out = changeSides(in)
         key = [n/2+1:1:n 1:1:n/2];
         out = in(key,key,:);    
     end
+    
+function [out,TD] = NRP(in,TD,port)
+     [p, f, n, X] = decomposeSparameters(in);
+     fend = f(end);
+     if nargin == 1
+         TD = zeros(X,1);
+         for i = 1:X
+            theta0 = angle(p(i,i,end));
+            if theta0 < -pi/2
+                theta = -pi - theta0;
+            elseif theta0 > pi/2
+                theta = pi - theta0;
+            else
+                theta = -theta0;
+            end
+            TD(i) = -theta/(2*pi*fend);
+            pd = zeros(X,X,n);
+            delay = exp(-1i.*2.*pi.*f.*TD(i)/2);
+            if i == 1
+                pd(i + X/2,i,:) = delay;
+                pd(i,i + X/2,:) = delay;             
+                pout = cascadesparams(pd,p);            
+            elseif i <= X/2
+                pd(i + X/2,i,:) = delay;
+                pd(i,i + X/2,:) = delay;                         
+                pout = cascadesparams(pd,pout);
+            else
+                pd(i - X/2,i,:) = delay;
+                pd(i,i - X/2,:) = delay;    
+                pout = cascadesparams(pout,pd);
+            end
+         end
+         out = sparameters(pout,f);
+     end
+     if nargin >= 2
+         pd = zeros(X,X,n);
+         if nargin == 3
+            i = port;
+            delay = exp(1i.*2.*pi.*f.*TD(i)/2);
+            if i <= X/2
+                pd(i + X/2,i,:) = delay;
+                pd(i,i + X/2,:) = delay;                         
+                pout = cascadesparams(pd,p);
+            else
+                pd(i - X/2,i,:) = delay;
+                pd(i,i - X/2,:) = delay;    
+                pout = cascadesparams(p,pd);
+            end
+         else
+             for i = 1:X
+                delay = exp(1i.*2.*pi.*f.*TD(i)/2);
+                if i == 1
+                    pd(i + X/2,i,:) = delay;
+                    pd(i,i + X/2,:) = delay;             
+                    pout = cascadesparams(pd,p);            
+                elseif i <= X/2
+                    pd(i + X/2,i,:) = delay;
+                    pd(i,i + X/2,:) = delay;                         
+                    pout = cascadesparams(pd,pout);
+                else
+                    pd(i - X/2,i,:) = delay;
+                    pd(i,i - X/2,:) = delay;    
+                    pout = cascadesparams(pout,pd);
+                end
+             end
+         end
+         out = sparameters(pout,f);
+     end
+
+function out = shiftOnePort(in,N,port)
+    [p,f,n,X] = decomposeSparameters(in);
+    Omega0 = pi/n;
+    Omega = (Omega0:Omega0:pi).';
+    delay = exp(-N.*1i.*Omega/2);
+    pd = zeros(2,2,n);
+    if port <= X/2
+        pd(port,port + X/2,:) = delay;
+        pd(port + X/2,port,:) = delay;
+        out = sparameters(cascadesparams(pd,p),f);
+    else
+        pd(port,port - X/2,:) = delay;
+        pd(port - X/2,port,:) = delay;
+        out = sparameters(cascadesparams(p,pd),f);
+    end
+
+function [p,f,n,X] = decomposeSparameters(in)
+    if nargout >= 1; p = in.Parameters; end
+    if nargout >=2;  f = in.Frequencies;end
+    if nargout >=3;  n = length(f); end
+    if nargout > 3;  X = in.NumPorts; end   
+
+function out = shiftNPoints(in,N)
+    [p,f,n,X] = decomposeSparameters(in);
+    Omega0 = pi/n;
+    Omega = (Omega0:Omega0:pi).';
+    delay = exp(-N.*1i.*Omega/2);
+    pd = zeros(2,2,n);
+    for port = 1:X
+        if port <= X/2
+            pd(port,port + X/2,:) = delay;
+            pd(port + X/2,port,:) = delay;
+            p = cascadesparams(pd,p);
+        else
+            pd(port,port - X/2,:) = delay;
+            pd(port - X/2,port,:) = delay;
+            out = sparameters(cascadesparams(p,pd),f);
+        end
+    end
+
+function [out,eb1,eb2] = peelNPointsLossless(in,N)
+    % assume in is an S-parameter object
+    [p,f,n,~] = decomposeSparameters(in);
+    abcd = s2abcd(p,50);
+    Omega0 = pi/n;
+    Omega = Omega0:Omega0:pi;
+    betal = Omega/2;
+    
+    for i = 1:N
+        % get the S11 vector in time
+        h1 = makeStep(fftshift(ifft(makeSymmetric([dc(squeeze(p(1,1,:)),f);squeeze(p(1,1,:))]),"symmetric")));
+        % get the S22 vector in time
+        h2 = makeStep(fftshift(ifft(makeSymmetric([dc(squeeze(p(2,2,:)),f);squeeze(p(2,2,:))]),"symmetric")));
+        % calculate impedance
+        z1 = -50.*(h1+1)./(h1-1); z1 = ifftshift(z1);
+        z2 = -50.*(h2+1)./(h2-1); z2 = ifftshift(z2);
+        % create a single point error box
+        z10 = z1(1);
+        z20 = z2(1);
+        
+        % this is the transmission line to be removed
+        ABCD1 = getABCD(z10,betal);
+        ABCD2 = getABCD(z20,betal);
+        
+        % remove the errorboxes
+        for j = 1:n
+            abcd(:,:,j) = ABCD1(:,:,j)\abcd(:,:,j)/ABCD2(:,:,j);            
+        end
+        p = abcd2s(abcd,50);
+        % capture the errorboxes from side 1 and 2
+        if i == 1
+            eb1 = ABCD1;
+            eb2 = ABCD2;
+        else
+            for j = 1:n
+                eb1(:,:,j) = eb1(:,:,j)*ABCD1(:,:,j);
+                eb2(:,:,j) = ABCD2(:,:,j)*eb2(:,:,j);
+            end
+        end
+    
+    end
+    % outputs
+    eb1 = sparameters(abcd2s(eb1,50),f); %  verified 
+    eb2 = sparameters(abcd2s(eb2,50),f);  % verified
+    out = sparameters(abcd2s(abcd,50),f); % verified    
+
+function ABCD = getABCD(z0,betal)
+    y0 = 1/z0;
+    A = cos(betal);
+    B = 1i.*(z0).*sin(betal);
+    C = 1i.*y0.*sin(betal);
+    ABCD = zeros(2,2,length(betal));
+    ABCD(1,1,:) = A;
+    ABCD(1,2,:) = B;
+    ABCD(2,1,:) = C;
+    ABCD(2,2,:) = A;    
     
