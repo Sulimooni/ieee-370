@@ -44,8 +44,8 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published November 28th, 2021
-% Revision: v8
+% Author: Jason J. Ellison, Published 4/25/2022
+% Revision: v9
 % 
 % IEEEP370Zc2xThru.m creates error boxes from a test fixture 2x thru and
 % the fixture-dut-fixture S-parameters.
@@ -202,8 +202,8 @@ end
 % === Remove Lead-in Points ===============
 if leadin > 0
     [~,temp1,temp2] = peelNPointsLossless(shiftNPoints(s_fix_dut_fix,leadin),leadin);
-    leadin1 = shiftOnePort(temp1,-leadin,1);
-    leadin2 = shiftOnePort(temp2,-leadin,2);
+    leadin1 = shiftOnePort(temp1,-leadin,1,z0);
+    leadin2 = shiftOnePort(temp2,-leadin,2,z0);
 end
 
 % =========== CALCULATE GAMMA =============
@@ -631,7 +631,7 @@ function [out,TD] = NRP(in,TD,port)
          out = sparameters(pout,f);
      end
 
-function out = shiftOnePort(in,N,port)
+function out = shiftOnePort(in,N,port,z0)
     [p,f,n,X] = decomposeSparameters(in);
     Omega0 = pi/n;
     Omega = (Omega0:Omega0:pi).';
@@ -640,11 +640,11 @@ function out = shiftOnePort(in,N,port)
     if port <= X/2
         pd(port,port + X/2,:) = delay;
         pd(port + X/2,port,:) = delay;
-        out = sparameters(cascadesparams(pd,p),f);
+        out = sparameters(cascadesparams(pd,p),f,z0);
     else
         pd(port,port - X/2,:) = delay;
         pd(port - X/2,port,:) = delay;
-        out = sparameters(cascadesparams(p,pd),f);
+        out = sparameters(cascadesparams(p,pd),f,z0);
     end
 
 function [p,f,n,X] = decomposeSparameters(in)
@@ -726,5 +726,37 @@ function ABCD = getABCD(z0,betal)
     ABCD(1,1,:) = A;
     ABCD(1,2,:) = B;
     ABCD(2,1,:) = C;
-    ABCD(2,2,:) = A;    
+    ABCD(2,2,:) = A; 
+
+ function [DCpoint] = dc(s,f) 
+% both s and f are assumed to be column vectors. enforce.
+if size(s,1) == 1
+    s = s';
+end
+if size(f,1) == 1
+    f = f';
+end
+        % [DCpoint] = dc(s,f) 
+        % force a dc point for reflection coefficient
+        DCpoint = 0.002; % seed for the algorithm
+        err = 1; % error seed
+        allowedError = 1e-10; % allowable error
+        cnt = 0;
+        df = f(2) - f(1);
+        n = length(f);
+        t = linspace(-1/df,1/df,n*2+1);
+        [~,ts] = min(abs(t - (-3e-9)));
+        Hr = simple_filter(f,f(end)/2,2);
+        while (err > allowedError)
+            h1 = makeStep(fftshift(real(ifft(makeSymmetric([DCpoint;s.*Hr])))));
+            h2 = makeStep(fftshift(real(ifft(makeSymmetric([DCpoint+0.001;s.*Hr])))));
+            m = (h2(ts)-h1(ts))/0.001;
+            b = h1(ts) - m*DCpoint;
+            DCpoint = (0 - b)/m;
+            err = abs(h1(ts) - 0);
+            cnt = cnt+1;
+        end  
+
+  function out = simple_filter(f,f0,filter_order)
+    out = 1./(1 + 1i.*(f./f0).^filter_order); 
     
