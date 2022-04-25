@@ -44,7 +44,7 @@ function [s_side1,s_side2] = IEEEP370mmZc2xthru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370mmZc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published November 28th, 2021
+% Author: Jason J. Ellison, Published 4/25/2022
 % Revision: v7
 % 
 % IEEEP370mmZc2xThru.m creates error boxes from a four-port test fixture 2x thru and
