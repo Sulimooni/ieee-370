@@ -129,4 +129,38 @@ function out = blackman(N,alpha)
 function t = tfromf(f)
     n = length(f);
     df = f(2) - f(1);
-    t = linspace(-1/(2*df),1/(2*df),2*n + 1);    
+    t = linspace(-1/(2*df),1/(2*df),2*n + 1); 
+
+function [DCpoint] = DC(s,f)       
+        DCpoint = 0.002; % seed for the algorithm
+        err = 1; % error seed
+        allowedError = 1e-12; % allowable error
+        cnt = 0;
+        df = f(2) - f(1);
+        n = length(f);
+        t = linspace(-1/df,1/df,n*2+1);
+        [~,ts] = min(abs(t - (-3e-9)));
+        Hr = COM_receiver_noise_filter(f,f(end)/2);
+        while (err > allowedError)
+            h1 = makeStep(fftshift(ifft(makeSymmetric([DCpoint;s.*Hr.']),'symmetric')));
+            h2 = makeStep(fftshift(ifft(makeSymmetric([DCpoint+0.001;s.*Hr.']),'symmetric')));
+            m = (h2(ts)-h1(ts))/0.001;
+            b = h1(ts) - m*DCpoint;
+            DCpoint = (0 - b)/m;
+            err = abs(h1(ts) - 0);
+            cnt = cnt+1;
+        end    
+
+function [symmetric] = makeSymmetric(nonsymmetric)
+    % [symmetric] = makeSymmetric(nonsymmetric)
+    % this takes the nonsymmetric frequency domain input and makes it
+    % symmetric.
+    %
+    % The function assumes the DC point is in the nonsymmetric data
+
+    symmetric_abs = [abs(nonsymmetric); flip(abs(nonsymmetric(2:end)))];
+    symmetric_ang = [angle(nonsymmetric); -flip(angle(nonsymmetric(2:end)))];
+    symmetric = symmetric_abs.*exp(1i.*symmetric_ang);
+
+function out = simple_filter(f,f0,filter_order)
+    out = 1./(1 + 1i.*(f./f0).^filter_order);        
