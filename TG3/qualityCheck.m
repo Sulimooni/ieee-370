@@ -92,16 +92,28 @@ passivity_metric = round(1000*norm(passivity_time_domain_difference_mv),1);
 figure(fig_num)
  plot(time_causal,squeeze(time_domain_causal(2,1,:))/2, 'r','lineWidth', 4); hold on;
  plot(time_original,squeeze(time_domain_original(2,1,:))/2,'--b','lineWidth', 4); hold on;
+ title("Time Domain 2, 1");
+ xlabel("time");
+ ylabel("amplitude");
 
 figure(fig_num +1)
  plot(time_causal,squeeze(time_domain_causal(1,2,:))/2, 'r','lineWidth', 4); hold on;
  plot(time_original,squeeze(time_domain_original(1,2,:))/2,'--b','lineWidth', 4); hold on;
+ title("Time Domain 1, 2");
+ xlabel("time");
+ ylabel("amplitude");
 
  figure(fig_num+2)
 plot(time_original,squeeze(time_domain_original(1,1,:))/2,'r','lineWidth', 4); hold on;
+ title("Time Domain 1, 1");
+ xlabel("time");
+ ylabel("amplitude");
 
 figure(fig_num+3)
 plot(time_original,squeeze(time_domain_original(2,2,:))/2,'r','lineWidth', 4); hold on;
+ title("Time Domain 2, 2");
+ xlabel("time");
+ ylabel("amplitude");
  
 %figure(fig_num+1)
 %plot(time_original,squeeze(time_domain_original(1,1,:))/2,'--b','lineWidth', 4); hold on;
