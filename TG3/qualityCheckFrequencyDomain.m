@@ -77,6 +77,9 @@ reciprocity_metric_freq = max((Nf - sum(RW)),0)/Nf*100;
 %Causality
 for i=1:port_num
     for j=1:port_num
+        if isscalar(unique(Sdata(i,j,:)))
+            CQM(i,j) = 100;
+        else    
         TotalR = 0;
         PositiveR = 0;
         for k=1:Nf-2
