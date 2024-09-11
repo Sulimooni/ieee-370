@@ -1,5 +1,5 @@
 function [s_side1,s_side2] = IEEEP3702xThru(s_2xthru,varargin)
-% Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
+% Copyright 2024 IEEE 370 open-source project authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
