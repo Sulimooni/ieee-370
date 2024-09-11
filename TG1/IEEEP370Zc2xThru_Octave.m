@@ -1,5 +1,5 @@
 function [data_side1,data_side2] = IEEEP370Zc2xThru_Octave(data_2xthru,data_fix_dut_fix,freq_2xthru,varargin)
-% Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
+% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
