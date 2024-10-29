@@ -6,5 +6,5 @@ The following individuals have contributed code to the IEEE 370 open source proj
 - Alessio Alaimo
 - Chris Diminico
 - Eric Bogatin
-- Peter Paupalakis
+- Peter Pupalaikis
 
