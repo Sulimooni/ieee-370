@@ -1,8 +1,14 @@
-We welcome contributions from everyone and appreciate your consideration in helping us to improve our code, tests, and documentation.
+## Style Guide
+- Any new code must have comments clearly describing what the code is doing. If references are required, place the references in comments where the reference is being used. If equations within a reference are being utilized, place the equation number after the line(s) of code where it is executed. 
+- If any new functionality is added and this new functionality requires a new input is needed or creates additional outputs, this functionality must be added to the docstring at the beginning of the code. The format follows:
+% "input_variable_name": description of the input (variable_type i.e. double, string, etc)
+%    default: the_default_value_of_the_input
 
-Provide guidance on what is not included in the contributing templates that they may consider creating in their project, including:  
-- A style guide for coding and for commit messages (e.g., Chris Beam’s 7 rules for writing good commit messages).
-- Communications guide (e.g., email, use of issue trackers, Slack, or Mattermost, etc.).
+Example:
+% "z0": reference impedance of the S-parameters (double)
+%    default: 50
+
+- Functions nested within the code are placed after the main body of the code.
 
 ## Open Source License and Contributor License Agreement
 
@@ -41,4 +47,6 @@ Please use the following workflow when submitting merge requests:
    - Include the complete path when referencing files within this repository (no URL required).
 
 ## Communicating with Us
-Add information about how best to communicate with your project and/or community including email addresses, Mattermost channels, recurring meetings, etc. Or if you prefer communication be done through issues and merge requests, state that.
+The best way to ask questions or submit changes is to email Jason Ellison directly with Josh Gay on copy. 
+- jason.j.ellison@ieee.org
+- j.gay@ieee.org
