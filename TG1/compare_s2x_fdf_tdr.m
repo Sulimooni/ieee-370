@@ -1,5 +1,5 @@
 function [] = compare_s2x_fdf_tdr(s2x,fdf)
-% Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
+% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
