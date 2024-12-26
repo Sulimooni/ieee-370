@@ -43,6 +43,8 @@
 
 function [new_freq,new_sdata] = extrapolateMatrix(freq,Sdata,port_num,data_rate,UI_samples,extrapolation_method)
 
+function [new_freq,new_sdata] = extrapolateMatrix(freq,Sdata,port_num,data_rate,UI_samples,extrapolation_method)
+
 max_freq = 0.5*data_rate*UI_samples;
 df = freq(2)-freq(1);
 new_freq = freq;
@@ -55,9 +57,9 @@ N = length(new_freq);
 for i=1:port_num
     for j=1:port_num
         sij = squeeze(Sdata(i,j,:));
+        N1 = length(sij);
         ph = unwrap(angle(sij));
-        dph = (ph(end)-ph(1))/(N-1);
-        N1 = length(sij);      
+        dph = (ph(end)-ph(1))/(N1-1);
         for k=N1+1:N
             if (extrapolation_method == 1)
                 sij(k)=sij(k-1)*exp(1j*dph);
