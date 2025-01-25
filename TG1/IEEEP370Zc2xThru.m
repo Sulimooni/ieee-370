@@ -1,4 +1,4 @@
-function [s_side1,s_side2] = IEEEP370Zc2xThru_v14(s_2xthru,s_fix_dut_fix,varargin)
+function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 % Copyright 2024 IEEE 370 open-source project authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
