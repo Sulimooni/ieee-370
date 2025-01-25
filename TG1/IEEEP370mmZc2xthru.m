@@ -1,5 +1,5 @@
 function [s_side1,s_side2] = IEEEP370mmZc2xthru(s_2xthru,s_fix_dut_fix,varargin)
-% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
+% Copyright 2024 IEEE 370 open-source project authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
@@ -44,8 +44,8 @@ function [s_side1,s_side2] = IEEEP370mmZc2xthru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370mmZc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published 4/25/2022
-% Revision: v7
+% Author: Jason J. Ellison, Published 1/25/2025
+% Revision: v8
 % 
 % IEEEP370mmZc2xThru.m creates error boxes from a four-port test fixture 2x thru and
 % the four-port fixture-dut-fixture S-parameters.
@@ -77,6 +77,21 @@ function [s_side1,s_side2] = IEEEP370mmZc2xthru(s_2xthru,s_fix_dut_fix,varargin)
 %    default: true
 % "portOrder": a number indicating the port order. Details below. [1 2 or
 %    3]. default: 1
+% "NRP": set to enforce the Nyquist Rate Point during de-embedding and to
+% add the appropriote delay to the errorboxes. 
+%    default: true
+% "leadin": a number of discrete points before t = 0 that are non-zero from
+% calibration error. 
+%    default: 1
+%
+% "enable_hybrid" : uses a subroutine to improve IL accuracy if pullback =
+%    0
+%    default: false
+%
+% "Pf": Percentage of the fixture to keep. The number can be set between
+% 0.1 and 1. This is another way to use pullback and overwrites pullback's
+% value if is set to something other than 1.
+% default: 1
 %
 % portOrder--defines the port map of the four-port S-parameters.
 %   1[default]: 
@@ -131,9 +146,13 @@ pullback2 = 0;
 side1 = true;
 side2 = true;
 portOrder = 1;
+NRP = true;
+leadin = 1;
+enable_hybrid = false;
+Pf = 1;
 
 for i = 1:length(names)
-    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2","portOrder"]);
+    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2","portOrder","NRP","leadin","enable_hybrid","Pf"]);
     switch names{i}
         case "z0"
             z0 = values{i};
@@ -154,6 +173,14 @@ for i = 1:length(names)
             side2 = values{i};
         case "portOrder"
             portOrder = values{i};
+        case "NRP"
+            NRP = values{i};
+        case "leadin"
+            leadin = values{i};
+        case "enable_hybrid"
+            enable_hybrid = values{i};
+        case "Pf"
+            Pf = values{i};            
     end
 end
 
@@ -199,8 +226,19 @@ cc_fdf = s2scc(p_fdf,portOrder);
 sdd_fdf = sparameters(dd_fdf,f,100);
 scc_fdf = sparameters(cc_fdf,f,25);
 
-[sdd_side1,sdd_side2] = IEEEP370Zc2xThru(sdd,sdd_fdf,"z0",z0*2,"bandwidth",bandwidth_limit,"view",view,"pullback1",pullback1,"pullback2",pullback2,"side1",side1,"side2",side2);
-[scc_side1,scc_side2] = IEEEP370Zc2xThru(scc,scc_fdf,"z0",z0/2,"bandwidth",bandwidth_limit,"view",view,"pullback1",pullback1,"pullback2",pullback2,"side1",side1,"side2",side2);
+options = {"bandwidth",bandwidth_limit,...
+           "view",view,...
+           "pullback1",pullback1,...
+           "pullback2",pullback2,...
+           "side1",side1,...
+           "side2",side2,...
+           "NRP",NRP,...
+           "leadin",leadin,...
+           "enable_hybrid",enable_hybrid,...
+           "Pf",Pf};
+
+[sdd_side1,sdd_side2] = IEEEP370Zc2xThru_v14(sdd,sdd_fdf,"z0",z0*2, options{:});
+[scc_side1,scc_side2] = IEEEP370Zc2xThru_v14(scc,scc_fdf,"z0",z0/2, options{:});
 
 %% side 1: define quadrants, convert back to SE, then make error box
 dd1x = zeros(2,2,n);
