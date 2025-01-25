@@ -1,5 +1,5 @@
 function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
-% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
+% Copyright 2024 IEEE 370 open-source project authors (See AUTHORS.md)
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
@@ -44,8 +44,8 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 %
 % FUNCTION: [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix)
 %
-% Author: Jason J. Ellison, Published 4/25/2022
-% Revision: v9
+% Author: Jason J. Ellison, Published 1/25/2025
+% Revision: v14
 % 
 % IEEEP370Zc2xThru.m creates error boxes from a test fixture 2x thru and
 % the fixture-dut-fixture S-parameters.
@@ -80,10 +80,19 @@ function [s_side1,s_side2] = IEEEP370Zc2xThru(s_2xthru,s_fix_dut_fix,varargin)
 % "side2": set to de-embed the left side errorbox (boolean).
 %    default: true
 % "NRP": set to enforce the Nyquist Rate Point during de-embedding and to
-% add the appropriote delay to the errorboxes. 
+%    add the appropriote delay to the errorboxes. 
 %    default: true
 % "leadin": a number of discrete points before t = 0 that are non-zero from
-% calibration error. 
+%    calibration error. 
+%    default: 1
+%
+% "enable_hybrid" : uses a subroutine to improve IL accuracy if pullback =
+%    0
+%    default: false
+%
+% "Pf": Percentage of the fixture to keep. The number can be set between
+%    0.1 and 1. This is another way to use pullback and overwrites pullback's
+%    value if is set to something other than 1.
 %    default: 1
 % 
 % Usage:
@@ -125,9 +134,11 @@ flag_DC = false;
 flag_DF = false;
 NRP_enable = true;
 leadin = 1;
+enable_hybrid = false;
+Pf = 1;
 
 for i = 1:length(names)
-    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2","NRP","leadin"]);
+    names{i} = validatestring(names{i},["z0","bandwidth","view","pullback","pullback1","pullback2","side1","side2","NRP","leadin","enable_hybrid","Pf"]);
     switch names{i}
         case "z0"
             z0 = values{i};
@@ -150,6 +161,10 @@ for i = 1:length(names)
             NRP_enable = values{i};
         case "leadin"
             leadin = values{i};
+        case "enable_hybrid"
+            enable_hybrid = values{i};     
+        case "Pf"
+            Pf = values{i};             
     end
 end
 
@@ -238,15 +253,15 @@ end
 s_side1 = thru(s_fix_dut_fix);
 s_side2 = thru(s_fix_dut_fix);
 if and(and(isequal(pullback1,pullback2),side1),side2)
-    [s_side1,s_side2] = makeErrorbox_v7(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1);
+    [s_side1,s_side2] = makeErrorbox_v7(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1,enable_hybrid,Pf);
 elseif and(side1,side2)
-    s_side1 = makeErrorbox_v8(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1);
-    s_side2 = makeErrorbox_v8(changeSides(s_fix_dut_fix),s_2xthru,gamma,z0,view,pullback2);
+    s_side1 = makeErrorbox_v8(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1,enable_hybrid, Pf);
+    s_side2 = makeErrorbox_v8(changeSides(s_fix_dut_fix),s_2xthru,gamma,z0,view,pullback2,enable_hybrid, Pf);
     s_side2 = changeSides(s_side2);
 elseif side1
-    s_side1 = makeErrorbox_v8(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1);
+    s_side1 = makeErrorbox_v8(s_fix_dut_fix,s_2xthru,gamma,z0,view,pullback1,enable_hybrid, Pf);
 elseif side2
-    s_side2 = makeErrorbox_v8(changeSides(s_fix_dut_fix),s_2xthru,gamma,z0,view,pullback2);
+    s_side2 = makeErrorbox_v8(changeSides(s_fix_dut_fix),s_2xthru,gamma,z0,view,pullback2,enable_hybrid, Pf);
     s_side2 = changeSides(s_side2);
 else
     warning("no output because no output was requested");
@@ -269,8 +284,12 @@ end
 
 % remove lead in
 if leadin > 0
-    s_side1 = cascadesparams(leadin1,s_side1);
-    s_side2 = cascadesparams(s_side2,leadin2);
+    if side1
+        s_side1 = cascadesparams(leadin1,s_side1);
+    end
+    if side2
+        s_side2 = cascadesparams(s_side2,leadin2);
+    end
 end
 
 % if Nyquist Rate Point enfocement is enabled.
@@ -360,7 +379,7 @@ function [DCpoint] = DC2(s,f)
         cnt = cnt+1;
     end
 
-function [errorbox1,errorbox2] = makeErrorbox_v7(s_dut,s2x,gamma,z0,view,pullback)
+function [errorbox1,errorbox2] = makeErrorbox_v7(s_dut,s2x,gamma,z0,view,pullback,enable_hybrid,Pf)
 f = s2x.Frequencies;
 n = length(f);
 s212x = rfparam(s2x,2,1);
@@ -371,6 +390,13 @@ DC21 = dc_interp(s212x,f);
 
 % define relative length
 l = 1/(2*x);
+
+% if Pf is set, overwrite pullback
+if Pf ~= 1
+    R = round(x*Pf);
+    pullback = x - R;
+end
+
 
 % define the reflections to be mimicked
 s11dut = rfparam(s_dut,1,1);
@@ -428,17 +454,65 @@ for i = 1:x-pullback
 
 end
 
+% if pullback was used, hybrid cannot be used.
+if pullback ~= 0
+    enable_hybrid = false;
+end
+
 % close(wait_handle);
 errorbox1 = sparameters(errorbox1,f,z0);
 errorbox2 = sparameters(changeSides(errorbox2),f,z0);
+if enable_hybrid
+    errorbox1 = hybrid(errorbox1,s2x,z0);
+    errorbox2 = changeSides(hybrid(changeSides(errorbox2), changeSides(s2x), z0));
+end
+    
+function errorbox = hybrid(errorbox,s2x,z0)
+    % taking the errorbox created by peeling and using it only for e00 and e11
+    
+    % grab s11 and s22 of errorbox model
+    s11_errorbox = errorbox; clear errorbox;
+    s111x = squeeze(s11_errorbox.Parameters(1,1,:));
+    s221x = squeeze(s11_errorbox.Parameters(2,2,:));
+    
+    % grab s21 of the 2x thru measurement
+    s212x = squeeze(s2x.Parameters(2,1,:));
+    f = s2x.Frequencies;
+    
+    % the choice of sign in the sqrt is important. Use the sign that captures the proper angle.
+    s211x = zeros(length(f),1);
+    s211x(1) = sqrt(s212x(1).*(1-s221x(1).^2));
+    test = sqrt(s212x.*(1-s221x.^2));
+    k = 1;
+    for i = 2:length(f)
+        if angle(test(i)) - angle(test(i-1)) > 0
+            k = k*-1;
+        end
+        s211x(i) = k*sqrt(s212x(i).*(1-s221x(i).^2));
+    end
+    
+    % create the error box and make the s-parameter block
+    errorbox_ = zeros(2,2,length(f));
+    errorbox_(1,1,:) = s111x;
+    errorbox_(2,1,:) = s211x;
+    errorbox_(1,2,:) = s211x;
+    errorbox_(2,2,:) = s221x;
+    errorbox = sparameters(errorbox_,f,z0);  
 
-function errorbox = makeErrorbox_v8(s_dut,s2x,gamma,z0,view,pullback)
+function errorbox = makeErrorbox_v8(s_dut,s2x,gamma,z0,view,pullback, enable_hybrid, Pf)
 f = s2x.Frequencies;
 s212x = rfparam(s2x,2,1);
 
 % extract midpoint of 2x-thru
 DC21 = dc_interp(s212x,f);
 [~,x] = max(ifft(makeSymmetric([DC21;s212x]),'symmetric'));
+
+% if Pf is set, overwrite pullback
+if Pf ~= 1
+    R = round(x*Pf);
+    pullback = x - R;
+end
+
 
 % define relative length
 l = 1/(2*x);
@@ -475,6 +549,15 @@ end
 
 % close(wait_handle);
 errorbox = sparameters(errorbox,f,z0);
+
+% if pullback was used, hybrid cannot be used.
+if pullback ~= 0
+    enable_hybrid = false;
+end
+
+if enable_hybrid
+    errorbox = hybrid(errorbox,s2x,z0);
+end
 
 function out = removeTL(in,TL1,TL2,z0)
     abcd_TL1 = s2abcd(TL1,z0);
