@@ -1,4 +1,4 @@
-% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
+% Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
@@ -41,22 +41,33 @@
 %
 % SPDX-License-Identifier: BSD-3-Clause
 
-function pulse = getpulse(dt,data_rate,N,rise_time_per)
+% function pulse = getpulse(dt,data_rate,N,rise_time_per)
+% Used by get_delay_time.m
+% INPUTS:
+%   dt: time interval in seconds. 
+%      dt = 1/(2*fmax + df)
+%   data_rate: the datarate in Gb/s
+%   N: number of frequency points
+%   rise_time_per: risetime as percentage of the UI (0 to 0.5)
 
-period = round(1/data_rate/1e9/dt);
+function [pulse, pulse_time] = getpulse(dt,data_rate,N,rise_time_per) % for debug
+% Revision 1:
+% [1]: Added error handling so it does not crash when the risetime is too small.
+% [2]: Added argument descriptions.
 
+period = round(1/data_rate/1e9/dt); % number of time steps per UI
 time_ = 0:dt:(N-1)*dt;
 
-r_t = round(period*rise_time_per);
+if rise_time_per > 0.9
+    rise_time_per = 0.9;
+    r_t = round(period*rise_time_per); % risetime in discrete points
+    disp("risetime is too short and is set to " + string(r_t*dt) + " seconds.");
+end
 
+r_t = round(period*rise_time_per); % risetime in discrete points
 v = [0, 0, 1, 1, 0, 0];
 offset = r_t*dt;
 t = [0, offset, offset+r_t*dt, offset+period*dt, offset+(period+r_t)*dt, time_(end)];
-
 pulse_time = interp1(t,v,time_);
-
-%figure(101)
-%plot(t,v, 'r','lineWidth',4); hold on;
-%plot(time_,pulse_time, '--b','lineWidth',4); hold on;
 
 pulse = fft(pulse_time);
