@@ -1,4 +1,4 @@
-% Copyright (c) 2017, IEEE 370 Open Source Authors (See AUTHORS.md)
+% Copyright 2017 The Institute of Electrical and Electronics Engineers, Incorporated (IEEE).
 %
 % This work is licensed to The Institute of Electrical and Electronics
 % Engineers, Incorporated (IEEE) under one or more contributor license
@@ -46,7 +46,7 @@ function [freq, Sdata_causal, delay_matrix] = createCausalMatrix(freq,Sdata,port
 for i=1:port_num
     for j=1:port_num
         sij = squeeze(Sdata(i,j,:));
-        for k=1:size(sij)
+        for k=1:length(sij)
             if abs(sij(k)) == 0
                 sij(k) = 0.00001;
             end
