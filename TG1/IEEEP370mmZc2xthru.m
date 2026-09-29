@@ -237,8 +237,8 @@ options = {"bandwidth",bandwidth_limit,...
            "enable_hybrid",enable_hybrid,...
            "Pf",Pf};
 
-[sdd_side1,sdd_side2] = IEEEP370Zc2xThru_v14(sdd,sdd_fdf,"z0",z0*2, options{:});
-[scc_side1,scc_side2] = IEEEP370Zc2xThru_v14(scc,scc_fdf,"z0",z0/2, options{:});
+[sdd_side1,sdd_side2] = IEEEP370Zc2xThru(sdd,sdd_fdf,"z0",z0*2, options{:});
+[scc_side1,scc_side2] = IEEEP370Zc2xThru(scc,scc_fdf,"z0",z0/2, options{:});
 
 %% side 1: define quadrants, convert back to SE, then make error box
 dd1x = zeros(2,2,n);
